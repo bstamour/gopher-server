@@ -164,12 +164,9 @@ static_assert(not std::is_move_assignable_v<TcpSocket>);
 void do_session(const std::filesystem::path &root, TcpSocket session_sock) {
   try {
     std::array<char, 1024> buffer;
-    {
-
-      if (not session_sock.read(std::as_writable_bytes(std::span(buffer)))) {
-        // report.
-        return;
-      }
+    if (not session_sock.read(std::as_writable_bytes(std::span(buffer)))) {
+      // report.
+      return;
     }
 
     const auto serve_error_msg = [&]() -> void {
