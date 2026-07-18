@@ -13,7 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <future>
+#include <thread>
 #include <iostream>
 #include <optional>
 #include <span>
@@ -21,7 +21,6 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 // Linux socket stuff.
 #include <arpa/inet.h>
@@ -215,11 +214,15 @@ struct program_args {
 
 int run(const program_args &args) {
   static std::atomic<bool> running = true;
-  std::signal(SIGINT, [](int sig) { running = false; });
+  std::signal(SIGINT, [](int sig) {
+    if (not running) {
+      std::exit(EXIT_SUCCESS);
+    }
+    running = false;
+  });
 
   TcpSocket socket(args.address, args.port);
 
-  std::vector<std::future<void>> sessions;
   while (running) {
     auto session_sock = socket.connect();
     if (not session_sock) {
@@ -228,14 +231,9 @@ int run(const program_args &args) {
 
     // Hand the session off to a new thread to service it. One
     // thread per session should be fine for now.
-    sessions.push_back(
-        std::async([&args, session_sock = std::move(session_sock)]() mutable {
-          do_session(args.doc_root, std::move(*session_sock));
-        }));
-  }
-
-  for (auto &session : sessions) {
-    session.get();
+    std::thread{[&args, session_sock = std::move(session_sock)]() mutable {
+      do_session(args.doc_root, std::move(*session_sock));
+    }}.detach();
   }
 
   return EXIT_SUCCESS;
