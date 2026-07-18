@@ -75,9 +75,6 @@ public:
       return std::nullopt;
     }
 
-    // printf("Connection accepted from %s:%d\n",
-    //               inet_ntoa(address.sin_addr), ntohs(address.sin_port));
-
     TcpSocket client(client_fd, inet_ntoa(address.sin_addr),
                      ntohs(address.sin_port));
     return client;
