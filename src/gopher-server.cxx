@@ -6,7 +6,7 @@
  * socket and serves up the asked-for content. No frills.
  */
 
-#include <async>
+#include <array>
 #include <atomic>
 #include <csignal>
 #include <cstddef>
@@ -15,6 +15,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -46,7 +47,7 @@ public:
    * Construct a TcpSocket from an address/port pair.
    */
   TcpSocket(std::string address, short port)
-      : addres_(std::move(address)), port_(port),
+      : address_(std::move(address)), port_(port),
         sock_(open_socket(address_, port)) {}
 
   ~TcpSocket() noexcept {
@@ -67,9 +68,9 @@ public:
    */
   std::optional<TcpSocket> connect() {
     ::sockaddr_in address;
-
+    ::socklen_t addr_len = sizeof(address);
     int client_fd =
-        ::accept(*sock_, static_cast<sockaddr *>(&address), sizeof(address));
+        ::accept(*sock_, reinterpret_cast<sockaddr *>(&address), &addr_len);
     if (client_fd < 0) {
       return std::nullopt;
     }
@@ -85,9 +86,9 @@ public:
   /**
    * Read data from the socket.
    */
-  std::optional<std::size_t> read(std::span<std::byte> buffer) {
-    const ssize_t bytes_read =
-        ::recv(*sock_, buffer.data(), buffer.size(), -1, 0);
+  template <std::size_t N>
+  std::optional<std::size_t> read(std::span<std::byte, N> buffer) {
+    const ssize_t bytes_read = ::recv(*sock_, buffer.data(), buffer.size(), 0);
     if (bytes_read < 0) {
       // Read error.
       return std::nullopt;
@@ -105,8 +106,9 @@ public:
   /**
    * Write data to the socket.
    */
-  std::optional<std::size_t> write(std::span<std::byte> buffer) {
-    const ssize_t sent = ::send(*sock_fd, buffer.data(), buffer.size(), 0);
+  template <std::size_t N>
+  std::optional<std::size_t> write(std::span<const std::byte, N> buffer) {
+    const ssize_t sent = ::send(*sock_, buffer.data(), buffer.size(), 0);
     if (sent < 0) {
       return std::nullopt;
     }
@@ -132,10 +134,10 @@ private:
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY; // TODO: fixme
-    interfaces address.sin_port = htons(port);
+    address.sin_port = htons(port);
 
-    if (::bind(sock_fd, static_cast<sockaddr *>(&address), sizeof(address)) <
-        0) {
+    if (::bind(sock_fd, reinterpret_cast<sockaddr *>(&address),
+               sizeof(address)) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
           "TcpSocket::open_socket: call to ::bind() failed");
@@ -162,14 +164,17 @@ static_assert(not std::is_move_assignable_v<TcpSocket>);
 void do_session(const std::filesystem::path &root, TcpSocket session_sock) {
   try {
     std::array<char, 1024> buffer;
-    if (not session_sock.read(std::span(buffer).as_bytes())) {
-      // report.
-      return;
+    {
+
+      if (not session_sock.read(std::as_writable_bytes(std::span(buffer)))) {
+        // report.
+        return;
+      }
     }
 
     const auto serve_error_msg = [&]() -> void {
-      static constexpr auto error_message = "Error: resource not found";
-      (void)session_sock.write(std::span(error_message).as_bytes());
+      static std::string error_message = "Error: resource not found";
+      (void)session_sock.write(std::as_bytes(std::span(error_message)));
     };
 
     // Construct a path from it.
@@ -191,13 +196,14 @@ void do_session(const std::filesystem::path &root, TcpSocket session_sock) {
       while (ifs) {
         ifs.read(out_buffer.data(), out_buffer.size());
         const auto chars_read = ifs.gcount();
-        session_sock.write(std::span(buffer, chars_read).as_bytes());
+        session_sock.write(
+            std::as_bytes(std::span<char>(buffer.data(), chars_read)));
       }
     };
 
     if (resource == root) {
       serve_file(resource / "gophermap");
-    } else if (std::filesystem::is_file(resource)) {
+    } else if (std::filesystem::is_regular_file(resource)) {
       serve_file(resource);
     } else if (std::filesystem::is_directory(resource)) {
       serve_file(resource / "gophermap");
@@ -229,8 +235,8 @@ int run(const program_args &args) {
     // Hand the session off to a new thread to service it. One
     // thread per session should be fine for now.
     sessions.push_back(
-        std::async([session_sock = std::move(session_sock)]() mutable {
-          do_session(args.doc_root, std::move(session_sock));
+        std::async([&args, session_sock = std::move(session_sock)]() mutable {
+          do_session(args.doc_root, std::move(*session_sock));
         }));
   }
 
