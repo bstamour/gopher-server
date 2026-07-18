@@ -8,17 +8,18 @@
 
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <csignal>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <thread>
 #include <iostream>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -66,6 +67,7 @@ public:
    * returns a new TcpSocket object for handling the new session.
    */
   std::optional<TcpSocket> connect() {
+    assert(sock_.has_value());
     ::sockaddr_in address;
     ::socklen_t addr_len = sizeof(address);
     int client_fd =
@@ -84,6 +86,7 @@ public:
    */
   template <std::size_t N>
   std::optional<std::size_t> read(std::span<std::byte, N> buffer) {
+    assert(sock_.has_value());
     const ssize_t bytes_read = ::recv(*sock_, buffer.data(), buffer.size(), 0);
     if (bytes_read < 0) {
       // Read error.
@@ -104,6 +107,7 @@ public:
    */
   template <std::size_t N>
   std::optional<std::size_t> write(std::span<const std::byte, N> buffer) {
+    assert(sock_.has_value());
     const ssize_t sent = ::send(*sock_, buffer.data(), buffer.size(), 0);
     if (sent < 0) {
       return std::nullopt;
