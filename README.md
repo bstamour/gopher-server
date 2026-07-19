@@ -6,3 +6,5 @@ A simple gopher server
 
 - Better gophermap creation. E.g. only add host/port if they're
   missing from the file.
+
+- commit hooks
