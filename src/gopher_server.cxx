@@ -246,12 +246,12 @@ private:
   }
 
   void write_resource(const std::filesystem::path &file) {
+    if (not is_within_doc_root(file)) {
+      return write_error("Resource not found");
+    }
+
     if (std::filesystem::is_regular_file(file)) {
       std::clog << "Serving regular file: " << file << std::endl;
-
-      if (not is_within_doc_root(file)) {
-        return write_error("Resource not found");
-      }
 
       std::ifstream ifs(file);
       if (not ifs.is_open()) {
