@@ -200,7 +200,7 @@ public:
 
 private:
   void write_error(std::string msg) {
-    const std::string error_msg = "ERROR: " + msg;
+    const std::string error_msg = "ERROR: " + msg + "\n";
     sock_.write(std::as_bytes(std::span(error_msg)));
   }
 
@@ -224,8 +224,7 @@ private:
         break;
       }
 
-      static const std::string crlf = "\r\n";
-      line += crlf;
+      line += "\r\n";
       sock_.write(std::as_bytes(std::span(line)));
     }
 
@@ -235,9 +234,9 @@ private:
 
   bool is_within_doc_root(std::filesystem::path p) {
     bool good = false;
-    auto canonical_file = std::filesystem::canonical(p);
-    for (auto dir = canonical_file.parent_path();
-         not std::filesystem::equivalent(dir, "/"); dir = dir.parent_path()) {
+    p = std::filesystem::canonical(p);
+    for (auto dir = p.parent_path(); not std::filesystem::equivalent(dir, "/");
+         dir = dir.parent_path()) {
       if (std::filesystem::equivalent(dir, args_.doc_root)) {
         good = true;
         break;
@@ -246,7 +245,7 @@ private:
     return good;
   }
 
-  void write_resource(std::filesystem::path file) {
+  void write_resource(const std::filesystem::path &file) {
     if (std::filesystem::is_regular_file(file)) {
       std::clog << "Serving regular file: " << file << std::endl;
 
@@ -269,7 +268,7 @@ private:
     } else if (std::filesystem::is_directory(file)) {
       write_gophermap(file / "gophermap");
     } else {
-      return write_error("Unknown resource");
+      return write_error("Unknown resource type");
     }
   }
 };
