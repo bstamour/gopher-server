@@ -197,10 +197,15 @@ public:
   }
 
 private:
+  void write_error(std::string msg) {
+    const std::string error_msg = "ERROR: " + msg;
+    sock_.write(std::as_bytes(std::span(error_msg)));
+  }
+
   void write_gophermap(const std::filesystem::path &map_file) {
     std::ifstream ifs(map_file);
     if (not ifs.is_open()) {
-      return; // serve_error_msg();
+      return write_error("Resource not found");
     }
 
     std::string line;
@@ -226,11 +231,30 @@ private:
     sock_.write(std::as_bytes(std::span(lastline)));
   }
 
-  void write_file(const std::filesystem::path &file) {
+  bool is_within_doc_root(std::filesystem::path p) {
+    bool good = false;
+    auto canonical_file = std::filesystem::canonical(p);
+    for (auto dir = canonical_file.parent_path();
+         not std::filesystem::equivalent(dir, "/"); dir = dir.parent_path()) {
+      if (std::filesystem::equivalent(dir, args_.doc_root)) {
+        good = true;
+        break;
+      }
+    }
+    return good;
+  }
+
+  void write_file(std::filesystem::path file) {
     if (std::filesystem::is_regular_file(file)) {
+      std::clog << "Serving regular file: " << file << std::endl;
+
+      if (not is_within_doc_root(file)) {
+        return write_error("Resource not found");
+      }
+
       std::ifstream ifs(file);
       if (not ifs.is_open()) {
-        return; // serve_error_msg();
+        return write_error("Resource not found");
       }
 
       std::array<char, 1024> out_buffer;
@@ -243,7 +267,7 @@ private:
     } else if (std::filesystem::is_directory(file)) {
       write_gophermap(file / "gophermap");
     } else {
-      std::clog << "ERROR: cannot handle that resource." << std::endl;
+      return write_error("Unknown resource");
     }
   }
 };
