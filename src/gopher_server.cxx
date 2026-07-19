@@ -23,10 +23,10 @@
 #include <type_traits>
 #include <utility>
 
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace gopher {
 namespace {
@@ -77,7 +77,7 @@ public:
     }
 
     TcpServerSocket client(client_fd, inet_ntoa(address.sin_addr),
-                     ntohs(address.sin_port));
+                           ntohs(address.sin_port));
     return client;
   }
 
@@ -172,7 +172,7 @@ public:
   Session(program_args args, TcpServerSocket sock)
       : args_(std::move(args)), sock_(std::move(sock)) {}
 
-  Session(Session&&) = delete;
+  Session(Session &&) = delete;
 
   /**
    * Handle a single request/response session.
