@@ -191,7 +191,7 @@ public:
         if (resource_str.ends_with("\r\n")) {
           resource_str = resource_str.substr(0, resource_str.size() - 2);
         }
-        write_file(args_.doc_root / resource_str);
+        write_resource(args_.doc_root / resource_str);
       }
     } catch (const std::exception &e) {
       std::clog << "do_session: " << e.what() << std::endl;
@@ -246,7 +246,7 @@ private:
     return good;
   }
 
-  void write_file(std::filesystem::path file) {
+  void write_resource(std::filesystem::path file) {
     if (std::filesystem::is_regular_file(file)) {
       std::clog << "Serving regular file: " << file << std::endl;
 
