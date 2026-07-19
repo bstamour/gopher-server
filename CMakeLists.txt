@@ -7,3 +7,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 project(gopher-server LANGUAGES CXX)
 
 add_executable(gopher-server src/gopher_server.cxx)
+
+find_package(Threads REQUIRED)
+target_link_libraries(gopher-server PRIVATE Threads::Threads)
