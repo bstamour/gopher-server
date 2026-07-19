@@ -164,79 +164,91 @@ struct program_args {
   std::filesystem::path doc_root;
 };
 
-void write_gophermap(const program_args &args,
-                     const std::filesystem::path &map_file, TcpSocket &sock) {
-  std::ifstream ifs(map_file);
-  if (not ifs.is_open()) {
-    return; // serve_error_msg();
-  }
+class Session {
+  program_args args_;
+  TcpSocket sock_;
 
-  std::string line;
-  while (std::getline(ifs, line)) {
-    switch (line[0]) {
-    case '0':
-      line += "\t" + args.address + "\t" + std::to_string(args.port);
-      break;
-    default:
-      break;
+public:
+  Session(program_args args, TcpSocket sock)
+      : args_(std::move(args)), sock_(std::move(sock)) {}
+
+  /**
+   * Handle a single request/response session.
+   */
+  void run() {
+    try {
+      std::array<char, 1024> buffer;
+      auto bytes_read = sock_.read(std::as_writable_bytes(std::span(buffer)));
+      if (not bytes_read.has_value()) {
+        return;
+      }
+      std::string resource_str(buffer.data(), buffer.data() + *bytes_read);
+      if (resource_str == "\r\n") {
+        write_gophermap(args_.doc_root / "gophermap");
+      } else {
+        if (resource_str.ends_with("\r\n")) {
+          resource_str = resource_str.substr(0, resource_str.size() - 2);
+        }
+        write_file(args_.doc_root / resource_str);
+      }
+    } catch (const std::exception &e) {
+      std::clog << "do_session: " << e.what() << std::endl;
     }
-
-    static const std::string crlf = "\r\n";
-    line += crlf;
-    sock.write(std::as_bytes(std::span(line)));
   }
 
-  std::string lastline = ".\r\n";
-  sock.write(std::as_bytes(std::span(lastline)));
-}
-
-void write_file(const program_args &args, const std::filesystem::path &file,
-                TcpSocket &sock) {
-  if (std::filesystem::is_regular_file(file)) {
-    std::ifstream ifs(file);
+private:
+  void write_gophermap(const std::filesystem::path &map_file) {
+    std::ifstream ifs(map_file);
     if (not ifs.is_open()) {
       return; // serve_error_msg();
     }
 
-    std::array<char, 1024> out_buffer;
-    while (ifs) {
-      ifs.read(out_buffer.data(), out_buffer.size());
-      const auto chars_read = ifs.gcount();
-      sock.write(std::as_bytes(std::span<char>(out_buffer.data(), chars_read)));
-    }
-  } else if (std::filesystem::is_directory(file)) {
-    write_gophermap(args, file / "gophermap", sock);
-  } else {
-    std::clog << "ERROR: cannot handle that resource." << std::endl;
-  }
-}
-
-/**
- * Handle a single request/response session.
- */
-void do_session(const program_args &args, TcpSocket session_sock) {
-  try {
-    std::array<char, 1024> buffer;
-    auto bytes_read =
-        session_sock.read(std::as_writable_bytes(std::span(buffer)));
-    if (not bytes_read.has_value()) {
-      return;
-    }
-    std::string resource_str(buffer.data(), buffer.data() + *bytes_read);
-    if (resource_str == "\r\n") {
-      write_gophermap(args, args.doc_root / "gophermap", session_sock);
-    } else {
-      if (resource_str.ends_with("\r\n")) {
-        resource_str = resource_str.substr(0, resource_str.size() - 2);
+    std::string line;
+    while (std::getline(ifs, line)) {
+      switch (line[0]) {
+      case '0':
+      case 'h':
+        line += "\t" + args_.address + "\t" + std::to_string(args_.port);
+        break;
+      case 'i':
+        line += "\tnull.host\t1";
+        break;
+      default:
+        break;
       }
-      write_file(args, args.doc_root / resource_str, session_sock);
-    }
-  } catch (const std::exception &e) {
-    std::clog << "do_session: " << e.what() << std::endl;
-  }
-}
 
-int run(const program_args &args) {
+      static const std::string crlf = "\r\n";
+      line += crlf;
+      sock_.write(std::as_bytes(std::span(line)));
+    }
+
+    std::string lastline = ".\r\n";
+    sock_.write(std::as_bytes(std::span(lastline)));
+  }
+
+  void write_file(const std::filesystem::path &file) {
+    if (std::filesystem::is_regular_file(file)) {
+      std::ifstream ifs(file);
+      if (not ifs.is_open()) {
+        return; // serve_error_msg();
+      }
+
+      std::array<char, 1024> out_buffer;
+      while (ifs) {
+        ifs.read(out_buffer.data(), out_buffer.size());
+        const auto chars_read = ifs.gcount();
+        sock_.write(
+            std::as_bytes(std::span<char>(out_buffer.data(), chars_read)));
+      }
+    } else if (std::filesystem::is_directory(file)) {
+      write_gophermap(file / "gophermap");
+    } else {
+      std::clog << "ERROR: cannot handle that resource." << std::endl;
+    }
+  }
+};
+
+int run(program_args args) {
   static std::atomic<bool> running = true;
   std::signal(SIGINT, [](int sig) {
     if (not running) {
@@ -256,7 +268,8 @@ int run(const program_args &args) {
     // Hand the session off to a new thread to service it. One
     // thread per session should be fine for now.
     std::thread{[args, session_sock = std::move(session_sock)]() mutable {
-      do_session(args, std::move(*session_sock));
+      Session session(std::move(args), std::move(*session_sock));
+      session.run();
     }}.detach();
   }
 
