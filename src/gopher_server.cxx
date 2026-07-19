@@ -34,39 +34,39 @@ namespace {
 /**
  * Wrapper around a TCP socket.
  */
-class TcpServerSocket {
+class tcp_server_socket {
   std::string address_;
   short port_;
   std::optional<int> sock_;
 
-  TcpServerSocket(int sock_fd, std::string address, short port)
+  tcp_server_socket(int sock_fd, std::string address, short port)
       : address_(std::move(address)), port_(port), sock_(sock_fd) {}
 
 public:
   /**
-   * Construct a TcpServerSocket from an address/port pair.
+   * Construct a tcp_server_socket from an address/port pair.
    */
-  TcpServerSocket(std::string address, short port)
+  tcp_server_socket(std::string address, short port)
       : address_(std::move(address)), port_(port),
         sock_(open_socket(address_, port)) {}
 
-  ~TcpServerSocket() noexcept {
+  ~tcp_server_socket() noexcept {
     if (sock_.has_value()) {
       ::close(*sock_);
     }
   }
 
-  TcpServerSocket(const TcpServerSocket &) = delete;
+  tcp_server_socket(const tcp_server_socket &) = delete;
 
-  TcpServerSocket(TcpServerSocket &&other)
+  tcp_server_socket(tcp_server_socket &&other)
       : address_(std::move(other.address_)), port_(other.port_),
         sock_(std::exchange(other.sock_, std::nullopt)) {}
 
   /**
    * For server-side. Wait for a new connection to arrive, and
-   * returns a new TcpServerSocket object for handling the new session.
+   * returns a new tcp_server_socket object for handling the new session.
    */
-  std::optional<TcpServerSocket> connect() {
+  std::optional<tcp_server_socket> connect() {
     assert(sock_.has_value());
     ::sockaddr_in address;
     ::socklen_t addr_len = sizeof(address);
@@ -76,8 +76,8 @@ public:
       return std::nullopt;
     }
 
-    TcpServerSocket client(client_fd, inet_ntoa(address.sin_addr),
-                           ntohs(address.sin_port));
+    tcp_server_socket client(client_fd, inet_ntoa(address.sin_addr),
+                             ntohs(address.sin_port));
     return client;
   }
 
@@ -122,14 +122,14 @@ private:
     int sock_fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd < 0) {
       throw std::runtime_error(
-          "TcpServerSocket::open_socket: call to ::socket() failed");
+          "tcp_server_socket::open_socket: call to ::socket() failed");
     }
 
     if (int opt = 1; ::setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
                                   sizeof(opt)) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
-          "TcpServerSocket::open_socket: call to ::setsockopt() failed");
+          "tcp_server_socket::open_socket: call to ::setsockopt() failed");
     }
 
     address.sin_family = AF_INET;
@@ -140,23 +140,23 @@ private:
                sizeof(address)) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
-          "TcpServerSocket::open_socket: call to ::bind() failed");
+          "tcp_server_socket::open_socket: call to ::bind() failed");
     }
 
     if (::listen(sock_fd, 3) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
-          "TcpServerSocket::open_socket: call to ::listen() failed");
+          "tcp_server_socket::open_socket: call to ::listen() failed");
     }
 
     return sock_fd;
   }
 };
 
-static_assert(std::is_move_constructible_v<TcpServerSocket>);
-static_assert(not std::is_copy_constructible_v<TcpServerSocket>);
-static_assert(not std::is_copy_assignable_v<TcpServerSocket>);
-static_assert(not std::is_move_assignable_v<TcpServerSocket>);
+static_assert(std::is_move_constructible_v<tcp_server_socket>);
+static_assert(not std::is_copy_constructible_v<tcp_server_socket>);
+static_assert(not std::is_copy_assignable_v<tcp_server_socket>);
+static_assert(not std::is_move_assignable_v<tcp_server_socket>);
 
 struct program_args {
   std::string address;
@@ -164,15 +164,15 @@ struct program_args {
   std::filesystem::path doc_root;
 };
 
-class Session {
+class session {
   program_args args_;
-  TcpServerSocket sock_;
+  tcp_server_socket sock_;
 
 public:
-  Session(program_args args, TcpServerSocket sock)
+  session(program_args args, tcp_server_socket sock)
       : args_(std::move(args)), sock_(std::move(sock)) {}
 
-  Session(Session &&) = delete;
+  session(session &&) = delete;
 
   /**
    * Handle a single request/response session.
@@ -274,10 +274,10 @@ private:
   }
 };
 
-static_assert(not std::is_move_constructible_v<Session>);
-static_assert(not std::is_copy_constructible_v<Session>);
-static_assert(not std::is_copy_assignable_v<Session>);
-static_assert(not std::is_move_assignable_v<Session>);
+static_assert(not std::is_move_constructible_v<session>);
+static_assert(not std::is_copy_constructible_v<session>);
+static_assert(not std::is_copy_assignable_v<session>);
+static_assert(not std::is_move_assignable_v<session>);
 
 int run(program_args args) {
   static std::atomic<bool> running = true;
@@ -288,7 +288,7 @@ int run(program_args args) {
     running = false;
   });
 
-  TcpServerSocket socket(args.address, args.port);
+  tcp_server_socket socket(args.address, args.port);
 
   while (running) {
     auto session_sock = socket.connect();
@@ -299,7 +299,7 @@ int run(program_args args) {
     // Hand the session off to a new thread to service it. One
     // thread per session should be fine for now.
     std::thread{[args, session_sock = std::move(session_sock)]() mutable {
-      Session session(std::move(args), std::move(*session_sock));
+      session session(std::move(args), std::move(*session_sock));
       session.run();
     }}.detach();
   }
