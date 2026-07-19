@@ -172,6 +172,8 @@ public:
   Session(program_args args, TcpServerSocket sock)
       : args_(std::move(args)), sock_(std::move(sock)) {}
 
+  Session(Session&&) = delete;
+
   /**
    * Handle a single request/response session.
    */
@@ -271,6 +273,11 @@ private:
     }
   }
 };
+
+static_assert(not std::is_move_constructible_v<Session>);
+static_assert(not std::is_copy_constructible_v<Session>);
+static_assert(not std::is_copy_assignable_v<Session>);
+static_assert(not std::is_move_assignable_v<Session>);
 
 int run(program_args args) {
   static std::atomic<bool> running = true;
