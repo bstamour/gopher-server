@@ -34,39 +34,39 @@ namespace {
 /**
  * Wrapper around a TCP socket.
  */
-class TcpSocket {
+class TcpServerSocket {
   std::string address_;
   short port_;
   std::optional<int> sock_;
 
-  TcpSocket(int sock_fd, std::string address, short port)
+  TcpServerSocket(int sock_fd, std::string address, short port)
       : address_(std::move(address)), port_(port), sock_(sock_fd) {}
 
 public:
   /**
-   * Construct a TcpSocket from an address/port pair.
+   * Construct a TcpServerSocket from an address/port pair.
    */
-  TcpSocket(std::string address, short port)
+  TcpServerSocket(std::string address, short port)
       : address_(std::move(address)), port_(port),
         sock_(open_socket(address_, port)) {}
 
-  ~TcpSocket() noexcept {
+  ~TcpServerSocket() noexcept {
     if (sock_.has_value()) {
       ::close(*sock_);
     }
   }
 
-  TcpSocket(const TcpSocket &) = delete;
+  TcpServerSocket(const TcpServerSocket &) = delete;
 
-  TcpSocket(TcpSocket &&other)
+  TcpServerSocket(TcpServerSocket &&other)
       : address_(std::move(other.address_)), port_(other.port_),
         sock_(std::exchange(other.sock_, std::nullopt)) {}
 
   /**
    * For server-side. Wait for a new connection to arrive, and
-   * returns a new TcpSocket object for handling the new session.
+   * returns a new TcpServerSocket object for handling the new session.
    */
-  std::optional<TcpSocket> connect() {
+  std::optional<TcpServerSocket> connect() {
     assert(sock_.has_value());
     ::sockaddr_in address;
     ::socklen_t addr_len = sizeof(address);
@@ -76,7 +76,7 @@ public:
       return std::nullopt;
     }
 
-    TcpSocket client(client_fd, inet_ntoa(address.sin_addr),
+    TcpServerSocket client(client_fd, inet_ntoa(address.sin_addr),
                      ntohs(address.sin_port));
     return client;
   }
@@ -122,14 +122,14 @@ private:
     int sock_fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd < 0) {
       throw std::runtime_error(
-          "TcpSocket::open_socket: call to ::socket() failed");
+          "TcpServerSocket::open_socket: call to ::socket() failed");
     }
 
     if (int opt = 1; ::setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
                                   sizeof(opt)) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
-          "TcpSocket::open_socket: call to ::setsockopt() failed");
+          "TcpServerSocket::open_socket: call to ::setsockopt() failed");
     }
 
     address.sin_family = AF_INET;
@@ -140,23 +140,23 @@ private:
                sizeof(address)) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
-          "TcpSocket::open_socket: call to ::bind() failed");
+          "TcpServerSocket::open_socket: call to ::bind() failed");
     }
 
     if (::listen(sock_fd, 3) < 0) {
       ::close(sock_fd);
       throw std::runtime_error(
-          "TcpSocket::open_socket: call to ::listen() failed");
+          "TcpServerSocket::open_socket: call to ::listen() failed");
     }
 
     return sock_fd;
   }
 };
 
-static_assert(std::is_move_constructible_v<TcpSocket>);
-static_assert(not std::is_copy_constructible_v<TcpSocket>);
-static_assert(not std::is_copy_assignable_v<TcpSocket>);
-static_assert(not std::is_move_assignable_v<TcpSocket>);
+static_assert(std::is_move_constructible_v<TcpServerSocket>);
+static_assert(not std::is_copy_constructible_v<TcpServerSocket>);
+static_assert(not std::is_copy_assignable_v<TcpServerSocket>);
+static_assert(not std::is_move_assignable_v<TcpServerSocket>);
 
 struct program_args {
   std::string address;
@@ -166,10 +166,10 @@ struct program_args {
 
 class Session {
   program_args args_;
-  TcpSocket sock_;
+  TcpServerSocket sock_;
 
 public:
-  Session(program_args args, TcpSocket sock)
+  Session(program_args args, TcpServerSocket sock)
       : args_(std::move(args)), sock_(std::move(sock)) {}
 
   /**
@@ -281,7 +281,7 @@ int run(program_args args) {
     running = false;
   });
 
-  TcpSocket socket(args.address, args.port);
+  TcpServerSocket socket(args.address, args.port);
 
   while (running) {
     auto session_sock = socket.connect();
