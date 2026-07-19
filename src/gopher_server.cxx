@@ -24,17 +24,9 @@
 #include <utility>
 
 #include <unistd.h>
-
-#ifdef __linux__
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#endif
-
-#ifdef __FreeBSD__
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#endif
 
 namespace gopher {
 namespace {
