@@ -306,6 +306,7 @@ int run(program_args args) {
 int main(int argc, char *argv[]) {
   try {
     if (argc != 4) {
+      std::cerr << "Usage: " << argv[0] << " hostname port doc-root\n";
       return EXIT_FAILURE;
     }
 
