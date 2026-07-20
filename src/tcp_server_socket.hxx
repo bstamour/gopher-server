@@ -6,6 +6,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
