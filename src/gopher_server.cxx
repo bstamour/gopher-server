@@ -24,49 +24,31 @@
 #include <type_traits>
 #include <utility>
 
-
+#include <grp.h>
+#include <pwd.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pwd.h>
-#include <grp.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-
 
 namespace gopher {
 namespace {
 
-void drop_privileges(const char *username) {
-    struct passwd *pw = getpwnam(username);
-    if (!pw) {
-        perror("getpwnam failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // 1. Initialize supplementary group list for the target user
-    if (initgroups(pw->pw_name, pw->pw_gid) != 0) {
-        perror("initgroups failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // 2. Set the effective and real Group ID (GID)
-    if (setgid(pw->pw_gid) != 0) {
-        perror("setgid failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // 3. Set the effective and real User ID (UID)
-    if (setuid(pw->pw_uid) != 0) {
-        perror("setuid failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Verify privileges were permanently dropped
-    if (setuid(0) == 0 || geteuid() != pw->pw_uid) {
-        fprintf(stderr, "Failed to permanently drop privileges\n");
-        exit(EXIT_FAILURE);
-    }
+void drop_privileges(const std::string& username) {
+  ::passwd *pw = ::getpwnam(username.c_str());
+  if (!pw) {
+    throw std::runtime_error("getpwnam failed");
+  }
+  if (::initgroups(pw->pw_name, pw->pw_gid) != 0) {
+    throw std::runtime_error("initgroups failed");
+  }
+  if (::setgid(pw->pw_gid) != 0) {
+    throw std::runtime_error("setgid failed");
+  }
+  if (::setuid(pw->pw_uid) != 0) {
+    throw std::runtime_error("setuid failed");
+  }
+  if (::setuid(0) == 0 || ::geteuid() != pw->pw_uid) {
+    throw std::runtime_error("Failed to permanently drop privileges");
+  }
 }
 
 struct program_args {
@@ -200,7 +182,7 @@ int run(program_args args) {
 
   tcp_server_socket socket(args.address, args.port);
 
-  drop_privileges("bryan");
+  drop_privileges("bryan"); // TODO get the user
 
   while (running) {
     auto session_sock = socket.connect();
