@@ -32,7 +32,7 @@
 namespace gopher {
 namespace {
 
-void drop_privileges(const std::string& username) {
+void drop_privileges(const std::string &username) {
   ::passwd *pw = ::getpwnam(username.c_str());
   if (!pw) {
     throw std::runtime_error("getpwnam failed");
@@ -55,6 +55,7 @@ struct program_args {
   std::string address;
   int port;
   std::filesystem::path doc_root;
+  std::string user;
 };
 
 class session {
@@ -182,7 +183,9 @@ int run(program_args args) {
 
   tcp_server_socket socket(args.address, args.port);
 
-  drop_privileges("bryan"); // TODO get the user
+  if (::geteuid() == 0) {
+    drop_privileges(args.user);
+  }
 
   while (running) {
     auto session_sock = socket.connect();
@@ -206,13 +209,15 @@ int run(program_args args) {
 
 int main(int argc, char *argv[]) {
   try {
-    if (argc != 4) {
-      std::cerr << "Usage: " << argv[0] << " hostname port doc-root\n";
+    if (argc != 5) {
+      std::cerr << "Usage: " << argv[0] << " hostname port doc-root user\n";
       return EXIT_FAILURE;
     }
 
-    const gopher::program_args args{
-        .address = argv[1], .port = std::atoi(argv[2]), .doc_root = argv[3]};
+    const gopher::program_args args{.address = argv[1],
+                                    .port = std::atoi(argv[2]),
+                                    .doc_root = argv[3],
+                                    .user = argv[4]};
     return gopher::run(args);
   } catch (const std::exception &e) {
     std::cerr << "Uncaught exception: " << e.what() << std::endl;
