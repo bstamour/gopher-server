@@ -43,7 +43,7 @@ public:
 
   tcp_server_socket(tcp_server_socket &&other)
       : address_(std::move(other.address_)), port_(other.port_),
-        sock_(std::move(other.sock_)) {}
+        sock_(std::exchange(other.sock_, std::nullopt)) {}
 
   /**
    * For server-side. Wait for a new connection to arrive, and
